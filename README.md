@@ -1,84 +1,103 @@
-# README
+# Super‑Resolution Demo (OpenCV DNN SuperRes)
 
-## Описание
+Этот репозиторий демонстрирует увеличение разрешения изображений с помощью
+модуля **`dnn_superres`** из OpenCV. Приложение поддерживает как классические
+методы интерполяции (bilinear, bicubic), так и ИИ‑модели (EDSR, ESPCN, FSRCNN,
+LapSRN). Так же добавлена **опциональная оценка качества**: программа может
+автоматически рассчитывать **PSNR** и **SSIM**.
 
-Этот пример демонстрирует использование модуля DNN Super Resolution из OpenCV для увеличения разрешения изображений с помощью различных алгоритмов (FSRCNN, EDSR, ESPCN, LapSRN) и классических методов масштабирования (bilinear, bicubic).
+---
+
+## Возможности
+
+| Возможность                | Описание                                                                                                                   |
+|----------------------------|----------------------------------------------------------------------------------------------------------------------------|
+| Простое масштабирование    | Увеличение «как есть» входного Low‑Res изображения до выбранного масштаба любым поддерживаемым алгоритмом.                 |
+| Режим *metrics*            | Программа принимает High‑Res изображение как «истинное», сама понижает его резолюцию, восстанавливает и выводит PSNR+SSIM. |
+| Поддерживаемые алгоритмы   | **bilinear**, **bicubic**, **edsr**, **espcn**, **fsrcnn**, **lapsrn**.                                                    |
+| Масштаб                    | 2x/3x/4x/8x (8x — только LapSRN).                                                                                          |
+| Вывод                      | Изображение сохраняется как `restored_<algo>.png` или `restored_<algo>_m.png` (при `--metrics`).                           |
+
+---
 
 ## Требования
 
-* [OpenCV](https://opencv.org/get-started/) версии 4.x с модулем `dnn_superres` (включённым при сборке через opencv\_contrib).
-* Компилятор C++ (GCC, Clang, MSVC).
-* CMake (опционально) или `pkg-config` для сборки.
+* **OpenCV 4.x** (собранный с `opencv_contrib` и флагом `-Dopencv_dnn_superres=ON`).
+* Компилятор C++17/20 (GCC, Clang, MSVC).
+* **CMake ≥ 3.20** *или* `pkg-config`.
+
+---
 
 ## Сборка
 
-### Через g++ и pkg-config
+### 1. Быстрый запуск через `g++`
 
 ```bash
-g++ -std=c++20 main.cpp -o superres `pkg-config --cflags --libs opencv4`
+# Linux / macOS
+ g++ -std=c++20 main.cpp -o superres $(pkg-config --cflags --libs opencv4)
+
+# Windows (MinGW)
+ g++ -std=c++20 main.cpp -o superres.exe -IC:/opencv/include -LC:/opencv/x64/mingw/lib -lopencv_core -lopencv_imgcodecs -lopencv_highgui -lopencv_dnn_superres
 ```
 
-### Через CMake
-
-Создайте `CMakeLists.txt` в той же папке:
+### 2. CMake
 
 ```cmake
-cmake_minimum_required(VERSION 3.30)
-project(Upscaler)
-
+cmake_minimum_required(VERSION 3.20)
+project(SuperResDemo LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
-
-add_executable(Upscaler main.cpp)
 find_package(OpenCV REQUIRED)
-
-target_link_libraries(Upscaler ${OpenCV_LIBS})
+add_executable(superres main.cpp)
+target_link_libraries(superres PRIVATE ${OpenCV_LIBS})
 ```
-
-Сборка:
 
 ```bash
 mkdir build && cd build
 cmake ..
-cmake --build .
+cmake --build . --config Release
 ```
+
+---
 
 ## Использование
 
 ```bash
-./superres <путь к изображению> <алгоритм> <масштаб> [<путь к модели>]
+# Классический апскейл
+./superres <image> <algorithm> <scale> [model_path]
+
+# Апскейл + метрики (PSNR, SSIM)
+./superres <image> <algorithm> <scale> [model_path] --metrics   # или -m
 ```
 
-* `<путь к изображению>` — входное изображение (JPEG, PNG и т.п.).
-* `<алгоритм>`:
+| Аргумент      | Значение                                                                                   |
+|---------------|--------------------------------------------------------------------------------------------|
+| **`<image>`** | Путь к входному изображению. В режиме `--metrics` это High‑Res GT.                         |
+| **`<algorithm>`** | `bilinear` · `bicubic` · `edsr` · `espcn` · `fsrcnn` · `lapsrn`                            |
+| **`<scale>`** | 2/3/4/8                                                                                    |
+| **`[model_path]`** | Файл`.pb` /`.onnx` для нейросетевых моделей. Не требуется для bilinear/bicubic.            |
+| **`--metrics`** | (опционально) Включает расчёт PSNR и SSIM. Программа сама уменьшается → восстанавливается. |
 
-  * `bilinear` — билинейная интерполяция.
-  * `bicubic` — бикубическая интерполяция.
-  * `edsr`, `espcn`, `fsrcnn`, `lapsrn` — методы на основе нейросетей.
-* `<масштаб>` — множитель (2, 3 или 4).
-* `[<путь к модели>]` — путь к файлу `.pb` (обязательно для нейросетевых алгоритмов).
-
-При отсутствии корректных аргументов будет выведена справка по использованию.
-
-Примеры:
-
-* `FSRCNN_x2.pb` для `fsrcnn` с масштабом 2.
-* `EDSR_x4.pb` для `edsr` с масштабом 4.
-
-## Пример использования
+### Примеры
 
 ```bash
-./superres input.jpg fsrcnn 2 models/FSRCNN_x2.pb
+# FSRCNN 2x, обычный режим
+./superres low.png fsrcnn 2 models/FSRCNN_x2.pb
+
+# EDSR 4x, c метриками
+./superres lena.png edsr 4 models/EDSR_x4.pb --metrics
 ```
-
-После выполнения:
-
-* В консоли появится сообщение `Upsampling succeeded.`
-* Окно покажет результирующее изображение.
-* Результат сохранится в файл `saved.jpg`.
 
 ---
 
-## Дополнительная информация об алгоритмах апскейлинга
+## Метрики качества
+
+* **PSNR** (Peak Signal‑to‑Noise Ratio)
+* **SSIM** (Structural Similarity) – рассчитывается по каждому цветному каналу (B, G, R).
+
+> Примечание: показатели имеют смысл **только** в режиме `--metrics`, когда Ground Truth известен.
+
+
+## Дополнительная информация об upscale-алгоритмах
 
 Ниже представлен обзор шести алгоритмов, поддерживаемых в этом примере, с классификацией по использованию ИИ и рекомендациями по выбору.
 
@@ -87,7 +106,7 @@ cmake --build .
 * **bilinear** (двухлинейная интерполяция): усреднение по двум направлениям (горизонтали и вертикали). Очень быстро, но даёт размытые края и артефакты «мыло».
 * **bicubic** (бикубическая интерполяция): учитывает 16 ближайших пикселей и аппроксимирует их кубическими полиномами. Лучше сглаживает границы, но всё ещё размывает мелкие детали.
 
-### 2. Методы на основе ИИ (нейросети)
+### 2. Методы на основе AI
 
 ### EDSR
 
@@ -119,7 +138,7 @@ cmake --build .
 * **Размер модели:** \~40КБ (версии FSRCNN-small — \~9КБ)
 * **Обучение:** \~30 итераций, batch size 1
 * **Поддерживаемые масштабы:** x2, x3, x4
-* **Скорость:** < 0.01 с на изображении 256×256 на Intel i7-9700K CPU
+* **Скорость:** < 0.01 с на изображении 256×256 на Intel i7-9700K CPU
 * **Преимущество:** быстрая, компактная и при этом точная
 * **Недостаток:** не достигает передового уровня точности
 * **Реализация:** [здесь](https://github.com/Saafke/FSRCNN_Tensorflow)
