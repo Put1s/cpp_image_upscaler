@@ -6,7 +6,7 @@
 
 ## Требования
 
-* OpenCV версии 4.x с модулем `dnn_superres` (включённым при сборке через opencv\_contrib).
+* [OpenCV](https://opencv.org/get-started/) версии 4.x с модулем `dnn_superres` (включённым при сборке через opencv\_contrib).
 * Компилятор C++ (GCC, Clang, MSVC).
 * CMake (опционально) или `pkg-config` для сборки.
 
@@ -15,7 +15,7 @@
 ### Через g++ и pkg-config
 
 ```bash
-g++ main.cpp -o superres `pkg-config --cflags --libs opencv4`
+g++ -std=c++20 main.cpp -o superres `pkg-config --cflags --libs opencv4`
 ```
 
 ### Через CMake
@@ -23,11 +23,15 @@ g++ main.cpp -o superres `pkg-config --cflags --libs opencv4`
 Создайте `CMakeLists.txt` в той же папке:
 
 ```cmake
-cmake_minimum_required(VERSION 3.5)
-project(DnnSuperResExample)
-find_package(OpenCV REQUIRED COMPONENTS dnn_superres imgproc highgui)
-add_executable(superres main.cpp)
-target_link_libraries(superres ${OpenCV_LIBS})
+cmake_minimum_required(VERSION 3.30)
+project(Upscaler)
+
+set(CMAKE_CXX_STANDARD 20)
+
+add_executable(Upscaler main.cpp)
+find_package(OpenCV REQUIRED)
+
+target_link_libraries(Upscaler ${OpenCV_LIBS})
 ```
 
 Сборка:
@@ -47,25 +51,20 @@ cmake --build .
 * `<путь к изображению>` — входное изображение (JPEG, PNG и т.п.).
 * `<алгоритм>`:
 
-    * `bilinear` — билинейная интерполяция.
-    * `bicubic` — бикубическая интерполяция.
-    * `edsr`, `espcn`, `fsrcnn`, `lapsrn` — методы на основе нейросетей.
+  * `bilinear` — билинейная интерполяция.
+  * `bicubic` — бикубическая интерполяция.
+  * `edsr`, `espcn`, `fsrcnn`, `lapsrn` — методы на основе нейросетей.
 * `<масштаб>` — множитель (2, 3 или 4).
 * `[<путь к модели>]` — путь к файлу `.pb` (обязательно для нейросетевых алгоритмов).
 
 При отсутствии корректных аргументов будет выведена справка по использованию.
-
-## Предварительно обученные модели
-
-Скачать модели можно из репозитория OpenCV Contrib:
-[https://github.com/opencv/opencv\_contrib/tree/master/modules/dnn\_superres/samples/models](https://github.com/opencv/opencv_contrib/tree/master/modules/dnn_superres/samples/models)
 
 Примеры:
 
 * `FSRCNN_x2.pb` для `fsrcnn` с масштабом 2.
 * `EDSR_x4.pb` для `edsr` с масштабом 4.
 
-## Пример
+## Пример использования
 
 ```bash
 ./superres input.jpg fsrcnn 2 models/FSRCNN_x2.pb
@@ -77,6 +76,72 @@ cmake --build .
 * Окно покажет результирующее изображение.
 * Результат сохранится в файл `saved.jpg`.
 
-## Лицензия
+---
 
-Исходный код распространяется под лицензией OpenCV (см. LICENSE в корне репозитория OpenCV).
+## Дополнительная информация об алгоритмах апскейлинга
+
+Ниже представлен обзор шести алгоритмов, поддерживаемых в этом примере, с классификацией по использованию ИИ и рекомендациями по выбору.
+
+### 1. Классические методы (без ИИ)
+
+* **bilinear** (двухлинейная интерполяция): усреднение по двум направлениям (горизонтали и вертикали). Очень быстро, но даёт размытые края и артефакты «мыло».
+* **bicubic** (бикубическая интерполяция): учитывает 16 ближайших пикселей и аппроксимирует их кубическими полиномами. Лучше сглаживает границы, но всё ещё размывает мелкие детали.
+
+### 2. Методы на основе ИИ (нейросети)
+
+### EDSR
+
+* **Скачивание модели:** [здесь](https://github.com/Saafke/EDSR_Tensorflow/tree/master/models)
+* **Размер модели:** \~38.5МБ (квантованная версия; оригинал — \~150МБ)
+* **Обучение:** 3 дня, batch size 16
+* **Поддерживаемые масштабы:** x2, x3, x4
+* **Скорость:** < 3с на изображении 256×256 на Intel i7-9700K CPU
+* **Преимущество:** высокая точность
+* **Недостаток:** медленная и большой размер файла
+* **Реализация:** [здесь](https://github.com/Saafke/EDSR_Tensorflow)
+* **Оригинальная статья:** [здесь](https://arxiv.org/pdf/1707.02921.pdf)
+
+### ESPCN
+
+* **Скачивание модели:** [здесь](https://github.com/fannymonori/TF-ESPCN/tree/master/export)
+* **Размер модели:** \~100КБ
+* **Обучение:** \~100 итераций, batch size 32
+* **Поддерживаемые масштабы:** x2, x3, x4
+* **Скорость:** < 0.01с на изображении 256×256 на Intel i7-9700K CPU
+* **Преимущество:** маленький размер и высокая скорость
+* **Недостаток:** уступает по визуальному качеству более современным моделям
+* **Реализация:** [здесь](https://github.com/fannymonori/TF-ESPCN)
+* **Оригинальная статья:** [здесь](https://arxiv.org/pdf/1609.05158.pdf)
+
+### FSRCNN
+
+* **Скачивание модели:** [здесь](https://github.com/Saafke/FSRCNN_Tensorflow/tree/master/models)
+* **Размер модели:** \~40КБ (версии FSRCNN-small — \~9КБ)
+* **Обучение:** \~30 итераций, batch size 1
+* **Поддерживаемые масштабы:** x2, x3, x4
+* **Скорость:** < 0.01 с на изображении 256×256 на Intel i7-9700K CPU
+* **Преимущество:** быстрая, компактная и при этом точная
+* **Недостаток:** не достигает передового уровня точности
+* **Реализация:** [здесь](https://github.com/Saafke/FSRCNN_Tensorflow)
+* **Оригинальная статья:** [здесь](http://mmlab.ie.cuhk.edu.hk/projects/FSRCNN.html)
+
+### LapSRN
+
+* **Скачивание модели:** [здесь](https://github.com/fannymonori/TF-LapSRN/tree/master/export)
+* **Размер модели:** от 1 до 5МБ
+* **Обучение:** \~50 итераций, batch size 32
+* **Поддерживаемые масштабы:** x2, x4, x8 (мультиуровневая суперрезолюция одним проходом)
+* **Скорость:** < 0.1с на изображении 256×256 на Intel i7-9700K CPU
+* **Преимущество:** поддержка нескольких масштабов в одном проходе
+* **Недостаток:** медленнее ESPCN и FSRCNN, точность ниже, чем у EDSR
+* **Реализация:** [здесь](https://github.com/fannymonori/TF-LAPSRN)
+* **Оригинальная статья:** [здесь](https://arxiv.org/pdf/1704.03915.pdf)
+
+
+Подробную информацию про бенчмарки и источники можно найти [здесь](https://github.com/opencv/opencv_contrib/tree/master/modules/dnn_superres)
+
+### Рекомендации по выбору
+
+* **Для скорости** (онлайн-видео, мобильные приложения): FSRCNN или ESPCN.
+* **Для максимальной чёткости** (если есть ресурсы на GPU): EDSR или LapSRN.
+* **Для простой предпросмотра** без ИИ: bilinear или bicubic.
