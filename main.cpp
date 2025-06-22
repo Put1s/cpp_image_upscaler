@@ -119,8 +119,8 @@ int main(int argc, char** argv) {
 	} else if (algorithm == "bicubic") {
 		resize(imgInput, imgRestored, cv::Size(), scale, scale, cv::INTER_CUBIC);
 	} else if (isDnnAlgo(algorithm)) {
-		cv::dnn_superres::DnnSuperResImpl sr;
 		try {
+			cv::dnn_superres::DnnSuperResImpl sr;
 			sr.readModel(modelPath);
 			sr.setModel(algorithm, scale);
 			sr.upsample(imgInput, imgRestored);
