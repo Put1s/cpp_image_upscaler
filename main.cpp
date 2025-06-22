@@ -39,14 +39,12 @@
 #include "metrics/metrics.h"
 
 using namespace std;
-using namespace cv;
-using namespace dnn_superres;
 
 
 // ------------------------------- helpers -----------------------------------
 static void printUsage() {
-	cerr << "Usage (upscale):\n" << "  superres <image> <algorithm> <scale> [model_path]\n\n" <<
-		"Usage (with metrics):\n" << "  superres <image> <algorithm> <scale> [model_path] --metrics\n\n" <<
+	cerr << "Usage (upscale):\n" << "  ./superres <image> <algorithm> <scale> [model_path]\n\n" <<
+		"Usage (with metrics):\n" << "  ./superres <image> <algorithm> <scale> [model_path] --metrics\n\n" <<
 		"Algorithms: bilinear | bicubic | edsr | espcn | fsrcnn | lapsrn\n";
 }
 
@@ -65,11 +63,14 @@ int main(int argc, char** argv) {
 	// 1. Parse arguments & flag
 	// -------------------------------------------------------------------
 	bool withMetrics = false;
+	bool quiet = false;
 	vector<string> args;
 	for (int i = 1; i < argc; ++i) {
 		string a(argv[i]);
 		if (a == "--metrics" || a == "-m")
 			withMetrics = true;
+		else if (a == "--quiet" || a == "-q")
+			quiet = true;
 		else
 			args.push_back(a);
 	}
@@ -92,18 +93,18 @@ int main(int argc, char** argv) {
 	// -------------------------------------------------------------------
 	// 2. Load image
 	// -------------------------------------------------------------------
-	Mat img = imread(imgPath, IMREAD_COLOR);
+	cv::Mat img = imread(imgPath, cv::IMREAD_COLOR);
 	if (img.empty()) {
 		cerr << "Error: cannot open image at " << imgPath << endl;
 		return EXIT_FAILURE;
 	}
 
-	Mat imgInput, imgRestored, imgGT;
+	cv::Mat imgInput, imgRestored, imgGT;
 
 	if (withMetrics) {
 		// Use the loaded image as ground truth (GT), build synthetic LR input
 		imgGT = img.clone();
-		resize(imgGT, imgInput, Size(), 1.0 / scale, 1.0 / scale, INTER_AREA);
+		resize(imgGT, imgInput, cv::Size(), 1.0 / scale, 1.0 / scale, cv::INTER_AREA);
 	} else {
 		imgInput = img; // Treat the loaded image as low‑res input
 	}
@@ -114,11 +115,11 @@ int main(int argc, char** argv) {
 	const auto tStart = chrono::steady_clock::now();
 
 	if (algorithm == "bilinear") {
-		resize(imgInput, imgRestored, Size(), scale, scale, INTER_LINEAR);
+		resize(imgInput, imgRestored, cv::Size(), scale, scale, cv::INTER_LINEAR);
 	} else if (algorithm == "bicubic") {
-		resize(imgInput, imgRestored, Size(), scale, scale, INTER_CUBIC);
+		resize(imgInput, imgRestored, cv::Size(), scale, scale, cv::INTER_CUBIC);
 	} else if (isDnnAlgo(algorithm)) {
-		DnnSuperResImpl sr;
+		cv::dnn_superres::DnnSuperResImpl sr;
 		try {
 			sr.readModel(modelPath);
 			sr.setModel(algorithm, scale);
@@ -139,11 +140,11 @@ int main(int argc, char** argv) {
 	// 4. Metrics (optional)
 	// -------------------------------------------------------------------
 	double psnr = 0.0;
-	Scalar ssim;
+	cv::Scalar ssim;
 	if (withMetrics) {
 		// Ensure sizes match (some models output slightly different dims)
 		if (imgRestored.size() != imgGT.size())
-			resize(imgRestored, imgRestored, imgGT.size(), 0, 0, INTER_CUBIC);
+			resize(imgRestored, imgRestored, imgGT.size(), 0, 0, cv::INTER_CUBIC);
 		psnr = cv::PSNR(imgGT, imgRestored);
 		ssim = metrics::getMSSIM(imgGT, imgRestored);
 	}
@@ -151,30 +152,37 @@ int main(int argc, char** argv) {
 	// -------------------------------------------------------------------
 	// 5. Report
 	// -------------------------------------------------------------------
-	cout << fixed << setprecision(4);
-	cout << "\n==== Results ===============================" << endl;
-	cout << "Mode       : " << (withMetrics ? "metrics" : "upscale-only") << endl;
-	cout << "Algorithm  : " << algorithm << endl;
-	cout << "Scale      : " << scale << "x" << endl;
-	cout << "Time       : " << elapsedMs << " ms" << endl;
-	if (withMetrics) {
-		cout << "PSNR        : " << psnr << " dB" << endl;
-		cout << "SSIM (B,G,R): " << ssim[0] << ", " << ssim[1] << ", " << ssim[2] << endl;
+	cout << fixed << setprecision(5);
+	if (quiet) {
+		if (withMetrics)
+			cout << psnr << ' ' << ssim[0] << ' ' << ssim[1] << ' ' << ssim[2] << endl;
+	} else {
+		cout << "\n==== Results ===============================" << endl;
+		cout << "Mode        : " << (withMetrics ? "metrics" : "upscale-only") << endl;
+		cout << "Algorithm   : " << algorithm << endl;
+		cout << "Scale       : " << scale << "x" << endl;
+		cout << "Time        : " << elapsedMs << " ms" << endl;
+		if (withMetrics) {
+			cout << "PSNR        : " << psnr << " dB" << endl;
+			cout << "SSIM (B,G,R): " << ssim[0] << ", " << ssim[1] << ", " << ssim[2] << endl;
+		}
+		cout << "===========================================\n" << endl;
 	}
-	cout << "===========================================\n" << endl;
 
 	// -------------------------------------------------------------------
-	// 6. Visualisation & save
+	// 6. Save & visualisation
 	// -------------------------------------------------------------------
-	if (withMetrics)
-		imshow("Ground Truth", imgGT);
-	imshow("Input", imgInput);
-	imshow("Restored (" + algorithm + ")", imgRestored);
 
-	string outName = withMetrics ? "restored_" + algorithm + "_m.png" : "restored_" + algorithm + ".png";
-	imwrite(outName, imgRestored);
-	cout << "Restored image saved as " << outName << endl;
 
-	waitKey(0);
+	if (!quiet) {
+		string outName = withMetrics ? "restored_" + algorithm + "_m.png" : "restored_" + algorithm + ".png";
+		imwrite(outName, imgRestored);
+		cout << "Restored image saved as " << outName << endl;
+		if (withMetrics)
+			imshow("Ground Truth", imgGT);
+		imshow("Input", imgInput);
+		imshow("Restored (" + algorithm + ")", imgRestored);
+		cv::waitKey(0);
+	}
 	return EXIT_SUCCESS;
 }
